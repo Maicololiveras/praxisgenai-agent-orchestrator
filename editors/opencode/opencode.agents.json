@@ -1,0 +1,125 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "sdd-orchestrator": {
+      "description": "OpenCode-native delegate-first orchestrator",
+      "mode": "all",
+      "prompt": "{file:./agents/sdd-orchestrator.md}",
+      "tools": {
+        "bash": true,
+        "read": true,
+        "edit": true,
+        "write": true
+      }
+    },
+    "skill-registry": {
+      "description": "Project skill catalog builder",
+      "mode": "all",
+      "prompt": "{file:./agents/skill-registry.md}",
+      "tools": {
+        "read": true,
+        "edit": true,
+        "write": true
+      }
+    },
+    "sdd-init": {
+      "description": "Initialize SDD context",
+      "mode": "all",
+      "prompt": "{file:./agents/sdd-init.md}",
+      "tools": {
+        "bash": true,
+        "read": true,
+        "edit": true,
+        "write": true
+      }
+    },
+    "sdd-explore": {
+      "description": "Explore a change or topic",
+      "mode": "all",
+      "prompt": "{file:./agents/sdd-explore.md}",
+      "tools": {
+        "bash": true,
+        "read": true,
+        "edit": true,
+        "write": true
+      }
+    },
+    "sdd-propose": {
+      "description": "Create change proposal",
+      "mode": "all",
+      "prompt": "{file:./agents/sdd-propose.md}",
+      "tools": {
+        "bash": true,
+        "read": true,
+        "edit": true,
+        "write": true
+      }
+    },
+    "sdd-spec": {
+      "description": "Write change specs",
+      "mode": "all",
+      "prompt": "{file:./agents/sdd-spec.md}",
+      "tools": {
+        "bash": true,
+        "read": true,
+        "edit": true,
+        "write": true
+      }
+    },
+    "sdd-design": {
+      "description": "Write technical design",
+      "mode": "all",
+      "prompt": "{file:./agents/sdd-design.md}",
+      "tools": {
+        "bash": true,
+        "read": true,
+        "edit": true,
+        "write": true
+      }
+    },
+    "sdd-tasks": {
+      "description": "Plan implementation tasks",
+      "mode": "all",
+      "prompt": "{file:./agents/sdd-tasks.md}",
+      "tools": {
+        "bash": true,
+        "read": true,
+        "edit": true,
+        "write": true
+      }
+    },
+    "sdd-apply": {
+      "description": "Implement planned tasks",
+      "mode": "all",
+      "prompt": "{file:./agents/sdd-apply.md}",
+      "tools": {
+        "bash": true,
+        "read": true,
+        "edit": true,
+        "write": true
+      }
+    },
+    "sdd-verify": {
+      "description": "Verify implementation against specs",
+      "mode": "all",
+      "prompt": "{file:./agents/sdd-verify.md}",
+      "tools": {
+        "bash": true,
+        "read": true,
+        "edit": true,
+        "write": true
+      }
+    },
+    "sdd-archive": {
+      "description": "Archive a completed change",
+      "mode": "all",
+      "prompt": "{file:./agents/sdd-archive.md}",
+      "tools": {
+        "bash": true,
+        "read": true,
+        "edit": true,
+        "write": true
+      }
+    }
+  }
+}

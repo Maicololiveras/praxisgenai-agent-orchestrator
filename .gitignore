@@ -1,0 +1,36 @@
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Node (if tests or tooling added later)
+node_modules/
+dist/
+*.log
+
+# Go (if CLI added later)
+/bin/
+*.exe
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Engram runtime
+*.db
+*.db-wal
+*.db-shm
+
+# OpenSpec runtime artifacts (should not be in the package itself)
+openspec/
+
+# ATL runtime
+.atl/
