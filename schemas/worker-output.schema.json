@@ -16,7 +16,8 @@
     "changes",
     "verification",
     "risks",
-    "next_recommended"
+    "next_recommended",
+    "memory_saved"
   ],
   "properties": {
     "contract_version": { "type": "string", "const": "1.0" },
@@ -31,7 +32,8 @@
         "area": { "type": "string", "description": "Glob pattern of owned area (e.g. src/auth/**)" },
         "touched_paths": { "type": "array", "items": { "type": "string" }, "description": "Files actually read or modified" },
         "untouched_paths": { "type": "array", "items": { "type": "string" }, "description": "Files explicitly NOT touched" }
-      }
+      },
+      "additionalProperties": false
     },
     "artifacts": {
       "type": "object",
@@ -40,7 +42,8 @@
         "created": { "type": "array", "items": { "type": "string" } },
         "updated": { "type": "array", "items": { "type": "string" } },
         "references": { "type": "array", "items": { "type": "string" } }
-      }
+      },
+      "additionalProperties": false
     },
     "findings": { "type": "array", "items": { "type": "string" }, "description": "Technical discoveries, gotchas, non-obvious learnings" },
     "decisions": { "type": "array", "items": { "type": "string" }, "description": "Decisions made during execution" },
@@ -51,7 +54,8 @@
       "properties": {
         "performed": { "type": "array", "items": { "type": "string" }, "description": "What was actually verified" },
         "not_performed": { "type": "array", "items": { "type": "string" }, "description": "What was NOT verified" }
-      }
+      },
+      "additionalProperties": false
     },
     "risks": { "type": "array", "items": { "type": "string" }, "description": "Dependencies, assumptions, limits, possible regressions" },
     "next_recommended": { "type": "array", "items": { "type": "string" }, "description": "Suggested next steps" },
