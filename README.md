@@ -89,6 +89,12 @@ curl -sSL https://raw.githubusercontent.com/Maicololiveras/praxisgenai-agent-orc
 - Philosophy: CONCEPTS > CODE, AI IS A TOOL, SOLID FOUNDATIONS
 - Injected into all editors' instruction files
 
+### Worker Output Contract
+- JSON Schema for structured sub-agent responses (`schemas/worker-output.schema.json`)
+- Enforced via `codex exec --output-schema`
+- Versioned contract with ownership, verification, and risk tracking
+- Validation rules: reject invalid JSON, missing fields, invented statuses, paths outside ownership, success without verification evidence
+
 ### Editor-Specific
 
 - **OpenCode**: Agent prompts (11 agents), slash commands (`/orch-*`, `/sdd-*`), config merge
@@ -170,6 +176,9 @@ This package is for editors that **lack** native multi-agent primitives. See [do
 
 ```
 praxisgenai-agent-orchestrator/
+  schemas/
+    worker-output.schema.json      # Worker output JSON Schema (v1.0)
+    worker-output.example.json     # Concrete example of valid output
   skills/                          # Shared skills (all editors)
     agent-team-orchestrator/SKILL.md
     skill-registry/SKILL.md

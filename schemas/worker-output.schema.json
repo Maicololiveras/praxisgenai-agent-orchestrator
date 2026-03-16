@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PraxisGenAI Worker Output Contract",
+  "description": "Structured output contract for sub-agent workers. Version 1.0",
+  "type": "object",
+  "required": [
+    "contract_version",
+    "worker_id",
+    "task_id",
+    "status",
+    "executive_summary",
+    "ownership",
+    "artifacts",
+    "findings",
+    "decisions",
+    "changes",
+    "verification",
+    "risks",
+    "next_recommended"
+  ],
+  "properties": {
+    "contract_version": { "type": "string", "const": "1.0" },
+    "worker_id": { "type": "string", "description": "Identifier for this worker (sub1, sub2, etc.)" },
+    "task_id": { "type": "string", "description": "Identifier for the task (explore-auth, implement-login, etc.)" },
+    "status": { "type": "string", "enum": ["success", "partial", "blocked"], "description": "success: completed. partial: partially done. blocked: cannot proceed." },
+    "executive_summary": { "type": "string", "description": "One paragraph summary of what was done and found." },
+    "ownership": {
+      "type": "object",
+      "required": ["area", "touched_paths", "untouched_paths"],
+      "properties": {
+        "area": { "type": "string", "description": "Glob pattern of owned area (e.g. src/auth/**)" },
+        "touched_paths": { "type": "array", "items": { "type": "string" }, "description": "Files actually read or modified" },
+        "untouched_paths": { "type": "array", "items": { "type": "string" }, "description": "Files explicitly NOT touched" }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "required": ["created", "updated", "references"],
+      "properties": {
+        "created": { "type": "array", "items": { "type": "string" } },
+        "updated": { "type": "array", "items": { "type": "string" } },
+        "references": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "findings": { "type": "array", "items": { "type": "string" }, "description": "Technical discoveries, gotchas, non-obvious learnings" },
+    "decisions": { "type": "array", "items": { "type": "string" }, "description": "Decisions made during execution" },
+    "changes": { "type": "array", "items": { "type": "string" }, "description": "Code changes applied (empty for exploration)" },
+    "verification": {
+      "type": "object",
+      "required": ["performed", "not_performed"],
+      "properties": {
+        "performed": { "type": "array", "items": { "type": "string" }, "description": "What was actually verified" },
+        "not_performed": { "type": "array", "items": { "type": "string" }, "description": "What was NOT verified" }
+      }
+    },
+    "risks": { "type": "array", "items": { "type": "string" }, "description": "Dependencies, assumptions, limits, possible regressions" },
+    "next_recommended": { "type": "array", "items": { "type": "string" }, "description": "Suggested next steps" },
+    "memory_saved": { "type": "array", "items": { "type": "string" }, "description": "Engram observations saved (optional)" }
+  },
+  "additionalProperties": false
+}

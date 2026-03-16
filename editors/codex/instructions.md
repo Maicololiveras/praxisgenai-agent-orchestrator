@@ -167,41 +167,76 @@ You CAN delegate work using `codex exec` as simulated sub-agents. Launch backgro
 
 ### How to Delegate
 
-To spawn a sub-agent, use bash:
-```bash
-codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-sub1.md "YOUR PROMPT HERE" &
+**Windows (PowerShell):** Use `Start-Job` + `Wait-Job` with `codex.cmd`
+**Linux/Mac (bash):** Use `&` + `wait` with `codex`
+**Important:** `codex.ps1` may be blocked by execution policy. Always use `codex.cmd` on Windows.
+
+To spawn multiple sub-agents in parallel:
+
+```powershell
+# Windows (PowerShell)
+$schema = Join-Path $PSScriptRoot 'schemas' 'worker-output.schema.json'
+# Or use the installed path:
+# $schema = "$HOME\.codex\schemas\worker-output.schema.json"
+
+$jobs = @()
+$jobs += Start-Job { & 'codex.cmd' exec --full-auto --ephemeral --output-schema $using:schema -o "$env:TEMP\praxisgenai-sub1.json" 'Explore the auth module' }
+$jobs += Start-Job { & 'codex.cmd' exec --full-auto --ephemeral --output-schema $using:schema -o "$env:TEMP\praxisgenai-sub2.json" 'Explore the database layer' }
+$jobs | Wait-Job
+$result1 = Get-Content "$env:TEMP\praxisgenai-sub1.json" | ConvertFrom-Json
+$result2 = Get-Content "$env:TEMP\praxisgenai-sub2.json" | ConvertFrom-Json
+if ($result1.status -notin @('success','partial','blocked')) { Write-Error "Invalid status from sub1" }
+if ($result2.status -notin @('success','partial','blocked')) { Write-Error "Invalid status from sub2" }
+Remove-Item "$env:TEMP\praxisgenai-sub*.json" -ErrorAction SilentlyContinue
 ```
 
-To spawn multiple in parallel:
 ```bash
-codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-sub1.md "Explore the auth module" &
-codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-sub2.md "Explore the database layer" &
+# Linux/Mac (bash)
+SCHEMA="$HOME/.codex/schemas/worker-output.schema.json"
+
+codex exec --full-auto --ephemeral --output-schema "$SCHEMA" -C "$(pwd)" -o /tmp/praxisgenai-sub1.json "Explore the auth module" &
+codex exec --full-auto --ephemeral --output-schema "$SCHEMA" -C "$(pwd)" -o /tmp/praxisgenai-sub2.json "Explore the database layer" &
 wait
-```
-
-To read results:
-```bash
-cat /tmp/praxisgenai-sub1.md
-cat /tmp/praxisgenai-sub2.md
-rm /tmp/praxisgenai-sub*.md
+# Validate with jq
+echo "$(cat /tmp/praxisgenai-sub1.json)" | jq -e '.status' > /dev/null || echo "INVALID sub1"
+echo "$(cat /tmp/praxisgenai-sub2.json)" | jq -e '.status' > /dev/null || echo "INVALID sub2"
+rm /tmp/praxisgenai-sub*.json
 ```
 
 ### Sub-Agent Prompt Template
 
-When delegating, include context in the prompt:
+When delegating, the prompt MUST instruct structured JSON output:
 ```
-You are a sub-agent working on: {task description}.
-Project: {project name} at {working directory}.
+You are a sub-agent. Worker ID: {worker_id}. Task ID: {task_id}.
+Project: {project} at {working directory}.
+You work ONLY on: {area glob pattern}. Do NOT touch other paths.
+
 Prior context: {summary from engram or previous phase}.
-Your task: {specific task}.
-Return: status, executive_summary, files touched, risks, next steps.
-Save important discoveries to engram via mem_save with project: '{project}'.
+Your task: {specific task description}.
+
+Respond EXCLUSIVELY in valid JSON following the worker output contract.
+Do NOT add markdown, explanations, or text outside the JSON.
+If you cannot complete the task, use status: "blocked" and explain in risks.
+
+Schema:
+{paste or reference schemas/worker-output.schema.json}
 ```
+
+### Orchestrator Validation Rules
+
+After reading sub-agent output, the main Codex MUST reject:
+- Invalid JSON (parse error)
+- Missing required fields
+- Status not in `["success", "partial", "blocked"]`
+- Paths in `touched_paths` outside declared ownership area
+- status `"success"` with empty `verification.performed` (no evidence = no trust)
+
+If rejected, log the error and optionally retry the sub-agent.
 
 ### Anti-patterns
 
 - DO NOT launch more than 4 sub-agents at once
-- DO NOT forget to `wait` for all sub-agents before reading results
+- DO NOT forget to `wait` (bash) or `Wait-Job` (PowerShell) for all sub-agents before reading results
 - DO NOT skip `-o` flag — without it you can't capture output
 - DO NOT run sub-agents without `--ephemeral` — they'll create unnecessary sessions
 - DO NOT run complex multi-phase work in one sub-agent — split into separate sub-agents
@@ -216,14 +251,29 @@ Save important discoveries to engram via mem_save with project: '{project}'.
 ### SDD Phase Delegation
 
 For SDD phases, delegate each to a sub-agent:
-```bash
-# Explore phase
-codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-explore.md \
-  "Load skill sdd-explore from ~/.codex/skills/sdd-explore/SKILL.md. Explore: {topic}. Project: {project}. Save results to engram." &
 
-# After explore completes, propose phase
-codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-propose.md \
-  "Load skill sdd-propose from ~/.codex/skills/sdd-propose/SKILL.md. Load exploration from engram topic sdd/{change}/explore. Create proposal for: {change}." &
+```powershell
+# Windows (PowerShell) — Explore phase, then propose phase
+$schema = "$HOME\.codex\schemas\worker-output.schema.json"
+
+$exploreJob = Start-Job { & 'codex.cmd' exec --full-auto --ephemeral --output-schema $using:schema -o "$env:TEMP\praxisgenai-explore.json" 'Load skill sdd-explore from ~/.codex/skills/sdd-explore/SKILL.md. Explore: {topic}. Project: {project}. Save results to engram. Respond in JSON following the worker output contract.' }
+$exploreJob | Wait-Job
+
+$proposeJob = Start-Job { & 'codex.cmd' exec --full-auto --ephemeral --output-schema $using:schema -o "$env:TEMP\praxisgenai-propose.json" 'Load skill sdd-propose from ~/.codex/skills/sdd-propose/SKILL.md. Load exploration from engram topic sdd/{change}/explore. Create proposal for: {change}. Respond in JSON following the worker output contract.' }
+$proposeJob | Wait-Job
+```
+
+```bash
+# Linux/Mac (bash) — Explore phase, then propose phase
+SCHEMA="$HOME/.codex/schemas/worker-output.schema.json"
+
+codex exec --full-auto --ephemeral --output-schema "$SCHEMA" -C "$(pwd)" -o /tmp/praxisgenai-explore.json \
+  "Load skill sdd-explore from ~/.codex/skills/sdd-explore/SKILL.md. Explore: {topic}. Project: {project}. Save results to engram. Respond in JSON following the worker output contract." &
+wait
+
+codex exec --full-auto --ephemeral --output-schema "$SCHEMA" -C "$(pwd)" -o /tmp/praxisgenai-propose.json \
+  "Load skill sdd-propose from ~/.codex/skills/sdd-propose/SKILL.md. Load exploration from engram topic sdd/{change}/explore. Create proposal for: {change}. Respond in JSON following the worker output contract." &
+wait
 ```
 
 ### SDD Commands
@@ -278,7 +328,7 @@ Load and follow any skills relevant to your task.
 
 ### Result Contract
 
-Every sub-agent returns: `status`, `executive_summary`, `artifacts`, `next_recommended`, `risks`.
+Every sub-agent returns valid JSON conforming to `schemas/worker-output.schema.json`. Required fields: `contract_version`, `worker_id`, `task_id`, `status`, `executive_summary`, `ownership`, `artifacts`, `findings`, `decisions`, `changes`, `verification`, `risks`, `next_recommended`.
 
 ### Skills Directory
 

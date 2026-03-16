@@ -70,29 +70,62 @@ For evolving topics, reuse `topic_key`.
 
 ## Sub-Agent Output Contract
 
-Every delegated worker must return:
+Every delegated worker MUST return valid JSON conforming to `schemas/worker-output.schema.json`.
 
-```yaml
-status: success | partial | blocked
-executive_summary: >
-  Short outcome-focused summary.
-ownership:
-  area: "<owned area/path/capability>"
-  touched_paths: []
-artifacts:
-  created: []
-  updated: []
-  references: []
-findings: []
-decisions: []
-changes: []
-verification:
-  performed: []
-  not_performed: []
-risks: []
-next_recommended: []
-memory_saved: []
+**Schema reference:** `schemas/worker-output.schema.json` (repo) or `~/.codex/schemas/worker-output.schema.json` (installed).
+
+**Enforcement by editor:**
+- **Codex**: Uses `codex exec --output-schema <path>` to enforce the schema at runtime.
+- **OpenCode** and **Gemini**: Follow the same contract via prompt instruction (no native schema enforcement).
+
+### Status Values
+
+| Status | Meaning |
+|--------|---------|
+| `success` | Task completed fully. `verification.performed` MUST be non-empty. |
+| `partial` | Task partially done. Some work completed, but not everything. |
+| `blocked` | Cannot proceed. Explain why in `risks`. |
+
+### Example Output
+
+```json
+{
+  "contract_version": "1.0",
+  "worker_id": "sub1",
+  "task_id": "explore-auth",
+  "status": "success",
+  "executive_summary": "Traced the full authentication flow...",
+  "ownership": {
+    "area": "src/auth/**",
+    "touched_paths": ["src/auth/login.ts", "src/auth/session.ts"],
+    "untouched_paths": ["src/payments/**"]
+  },
+  "artifacts": { "created": [], "updated": [], "references": ["docs/auth-flow.md"] },
+  "findings": ["Sessions persist in localStorage — vulnerable to XSS"],
+  "decisions": ["Focus on token lifecycle before session storage"],
+  "changes": [],
+  "verification": {
+    "performed": ["Code reading", "Flow tracing"],
+    "not_performed": ["Unit tests", "E2E flow"]
+  },
+  "risks": ["The interceptor is a global singleton — changes affect ALL API calls"],
+  "next_recommended": ["Implement refresh token rotation"],
+  "memory_saved": []
+}
 ```
+
+See `schemas/worker-output.example.json` for a complete example.
+
+### Orchestrator Validation Rules
+
+After reading sub-agent output, the orchestrator MUST reject:
+- **Invalid JSON** (parse error)
+- **Missing required fields** (any field from the schema's `required` list)
+- **Invented status** (status not in `["success", "partial", "blocked"]`)
+- **Paths outside ownership** (paths in `touched_paths` outside declared `ownership.area`)
+- **Success without evidence** (status `"success"` with empty `verification.performed` — no evidence = no trust)
+
+If rejected, log the error and optionally retry the sub-agent.
 
 ## Delegation Model per Editor
 
@@ -122,23 +155,49 @@ The orchestrator adapts its behavior based on the runtime's actual capabilities:
 - Main Codex reads all output files and synthesizes
 
 **How to delegate in Codex:**
+
+**Windows (PowerShell):** Use `Start-Job` + `Wait-Job` with `codex.cmd`
+**Linux/Mac (bash):** Use `&` + `wait` with `codex`
+**Important:** `codex.ps1` may be blocked by execution policy. Always use `codex.cmd` on Windows.
+
+```powershell
+# Windows (PowerShell) — Launch up to 4 sub-agents in parallel
+$schema = Join-Path $PSScriptRoot 'schemas' 'worker-output.schema.json'
+# Or use the installed path:
+# $schema = "$HOME\.codex\schemas\worker-output.schema.json"
+
+$jobs = @()
+$jobs += Start-Job { & 'codex.cmd' exec --full-auto --ephemeral --output-schema $using:schema -o "$env:TEMP\praxisgenai-sub1.json" 'PROMPT FOR TASK 1' }
+$jobs += Start-Job { & 'codex.cmd' exec --full-auto --ephemeral --output-schema $using:schema -o "$env:TEMP\praxisgenai-sub2.json" 'PROMPT FOR TASK 2' }
+$jobs | Wait-Job
+$result1 = Get-Content "$env:TEMP\praxisgenai-sub1.json" | ConvertFrom-Json
+$result2 = Get-Content "$env:TEMP\praxisgenai-sub2.json" | ConvertFrom-Json
+if ($result1.status -notin @('success','partial','blocked')) { Write-Error "Invalid status from sub1" }
+if ($result2.status -notin @('success','partial','blocked')) { Write-Error "Invalid status from sub2" }
+Remove-Item "$env:TEMP\praxisgenai-sub*.json" -ErrorAction SilentlyContinue
+```
+
 ```bash
-# Launch up to 4 sub-agents in parallel
-codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-sub1.md "PROMPT FOR TASK 1" &
-codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-sub2.md "PROMPT FOR TASK 2" &
+# Linux/Mac (bash) — Launch up to 4 sub-agents in parallel
+SCHEMA="$HOME/.codex/schemas/worker-output.schema.json"
+
+codex exec --full-auto --ephemeral --output-schema "$SCHEMA" -C "$(pwd)" -o /tmp/praxisgenai-sub1.json "PROMPT FOR TASK 1" &
+codex exec --full-auto --ephemeral --output-schema "$SCHEMA" -C "$(pwd)" -o /tmp/praxisgenai-sub2.json "PROMPT FOR TASK 2" &
 wait
-# Read results
-cat /tmp/praxisgenai-sub1.md
-cat /tmp/praxisgenai-sub2.md
+# Validate with jq
+echo "$(cat /tmp/praxisgenai-sub1.json)" | jq -e '.status' > /dev/null || echo "INVALID sub1"
+echo "$(cat /tmp/praxisgenai-sub2.json)" | jq -e '.status' > /dev/null || echo "INVALID sub2"
+rm /tmp/praxisgenai-sub*.json
 ```
 
 **Rules:**
 - Maximum 4 parallel sub-agents (to avoid saturating the machine)
 - Always use `--ephemeral` (no session persistence for sub-agents)
 - Always use `--full-auto` (no approval prompts)
-- Always use `-C "$(pwd)"` (same working directory)
 - Always use `-o <file>` (capture output to file)
-- Use `/tmp/praxisgenai-sub{N}.md` naming convention
+- **Windows**: Use `codex.cmd` (not `codex.ps1`), `$env:TEMP` for temp dir, `Start-Job`/`Wait-Job` for parallelism
+- **Linux/Mac**: Use `-C "$(pwd)"` (same working directory), `/tmp/` for temp dir, `&`/`wait` for parallelism
+- Use `praxisgenai-sub{N}.json` naming convention (JSON output, not markdown)
 - Clean up temp files after reading
 - If a sub-agent fails, read its output for error info
 

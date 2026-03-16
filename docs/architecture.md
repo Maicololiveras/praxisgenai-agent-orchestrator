@@ -160,6 +160,34 @@ When the conversation context compacts:
 
 This works because Engram state is external to the conversation context. File-based state would be lost if the conversation resets.
 
+## Worker Output Contract
+
+Sub-agents return structured JSON instead of freeform markdown. This is a deliberate architectural decision.
+
+### Why JSON, not Markdown
+
+Markdown is for humans. When the orchestrator reads sub-agent output, it needs to programmatically extract status, file paths, risks, and verification evidence. Parsing markdown for structured data is fragile and error-prone. JSON provides:
+
+- **Machine-parseable structure**: `JSON.parse()` or `jq` — no regex gymnastics.
+- **Schema validation**: The contract is defined in `schemas/worker-output.schema.json` and enforced at runtime via `codex exec --output-schema`.
+- **Rejection rules**: The orchestrator can reject invalid output before acting on it — missing fields, invented statuses, paths outside ownership, success claims without verification evidence.
+- **Versioned contract**: `contract_version: "1.0"` enables forward-compatible evolution.
+
+### Contract Fields
+
+Every worker output includes ownership tracking (`area`, `touched_paths`, `untouched_paths`), verification evidence (`performed`, `not_performed`), and risk declarations. This forces sub-agents to be explicit about what they did and did NOT do — preventing the orchestrator from trusting incomplete work.
+
+### Validation Rules
+
+The orchestrator rejects:
+1. Invalid JSON (parse error)
+2. Missing required fields from the schema
+3. Status values outside `["success", "partial", "blocked"]`
+4. File paths in `touched_paths` that fall outside the declared `ownership.area`
+5. Status `"success"` with empty `verification.performed` (no evidence = no trust)
+
+See `schemas/worker-output.schema.json` for the full schema and `schemas/worker-output.example.json` for a concrete example.
+
 ## Cross-Editor Compatibility
 
 All three supported editors (OpenCode, Gemini CLI, Codex) use the same:
@@ -189,21 +217,44 @@ Sub-agent support is a **runtime capability**, not a configuration choice:
 
 ### Codex simulated sub-agent pattern
 
-Codex simulates sub-agents by spawning `codex exec` processes in background:
+Codex simulates sub-agents by spawning `codex exec` processes in parallel.
 
+**Windows (PowerShell):** Use `Start-Job` + `Wait-Job` with `codex.cmd`
+**Linux/Mac (bash):** Use `&` + `wait` with `codex`
+**Important:** `codex.ps1` may be blocked by execution policy. Always use `codex.cmd` on Windows.
+
+The bash `&` background operator does NOT work in PowerShell 5.1. On Windows, use `Start-Job`/`Wait-Job` for parallelism.
+
+```powershell
+# Windows (PowerShell)
+$schema = "$HOME\.codex\schemas\worker-output.schema.json"
+
+$jobs = @()
+$jobs += Start-Job { & 'codex.cmd' exec --full-auto --ephemeral --output-schema $using:schema -o "$env:TEMP\praxisgenai-sub1.json" 'explore prompt' }
+$jobs += Start-Job { & 'codex.cmd' exec --full-auto --ephemeral --output-schema $using:schema -o "$env:TEMP\praxisgenai-sub2.json" 'analyze prompt' }
+$jobs | Wait-Job
+$result1 = Get-Content "$env:TEMP\praxisgenai-sub1.json" | ConvertFrom-Json
+$result2 = Get-Content "$env:TEMP\praxisgenai-sub2.json" | ConvertFrom-Json
+Remove-Item "$env:TEMP\praxisgenai-sub*.json" -ErrorAction SilentlyContinue
 ```
-Main Codex (interactive orchestrator)
-  |-- codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-sub1.md "explore prompt" &
-  |-- codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-sub2.md "analyze prompt" &
-  wait
-  |-- Reads /tmp/praxisgenai-sub1.md and /tmp/praxisgenai-sub2.md
-  '-- Synthesizes results, saves to Engram, cleans up temp files
+
+```bash
+# Linux/Mac (bash)
+SCHEMA="$HOME/.codex/schemas/worker-output.schema.json"
+
+codex exec --full-auto --ephemeral --output-schema "$SCHEMA" -C "$(pwd)" -o /tmp/praxisgenai-sub1.json "explore prompt" &
+codex exec --full-auto --ephemeral --output-schema "$SCHEMA" -C "$(pwd)" -o /tmp/praxisgenai-sub2.json "analyze prompt" &
+wait
+for f in /tmp/praxisgenai-sub*.json; do jq -e '.status' "$f" > /dev/null || echo "INVALID: $f"; done
+rm /tmp/praxisgenai-sub*.json
 ```
 
 Rules:
 - Maximum 4 parallel sub-agents
 - Always use `--ephemeral` (no session persistence) and `--full-auto` (no approval prompts)
 - Always use `-o <file>` to capture output
+- **Windows**: Use `codex.cmd` (not `codex.ps1`), `$env:TEMP` for temp dir, `Start-Job`/`Wait-Job` for parallelism
+- **Linux/Mac**: Use `-C "$(pwd)"` for working directory, `/tmp/` for temp dir, `&`/`wait` for parallelism
 - Each phase MUST save to Engram before completing
 - Each phase MUST load prior artifacts from Engram before starting
 - Engram remains the critical state bridge for cross-phase and cross-session continuity

@@ -98,25 +98,87 @@ The assistant should confirm:
 Codex doesn't have native sub-agents, but the orchestrator simulates them using `codex exec`:
 
 1. Main Codex (interactive) runs as the orchestrator
-2. It spawns up to 4 `codex exec` processes in background
-3. Each process writes its output to `/tmp/praxisgenai-sub{N}.md`
-4. Main Codex reads all outputs and synthesizes
+2. It spawns up to 4 `codex exec` processes in parallel
+3. Each process writes structured JSON to a temp file (`praxisgenai-sub{N}.json`)
+4. Main Codex reads all outputs, validates against the schema, and synthesizes
 
 This gives Codex effective multi-agent capability with:
 - Context isolation (each sub-agent has fresh context)
 - Parallel execution (up to 4 concurrent)
 - Clean output capture (via `-o` flag)
 - No session pollution (`--ephemeral`)
+- **Structured JSON output** (via `--output-schema`)
 
+## Worker Output Contract
+
+Sub-agents return structured JSON instead of freeform markdown. This enables programmatic validation and reliable orchestration.
+
+### Schema
+
+The contract is defined in `schemas/worker-output.schema.json` and enforced via `codex exec --output-schema`:
+
+```bash
+SCHEMA="$HOME/.codex/schemas/worker-output.schema.json"
+codex exec --full-auto --ephemeral --output-schema "$SCHEMA" -o /tmp/result.json "prompt..."
 ```
-Main Codex (visible, interactive)
-  |-- codex exec --full-auto --ephemeral -o /tmp/praxisgenai-sub1.md "prompt" &
-  |-- codex exec --full-auto --ephemeral -o /tmp/praxisgenai-sub2.md "prompt" &
-  |-- codex exec --full-auto --ephemeral -o /tmp/praxisgenai-sub3.md "prompt" &
-  |-- codex exec --full-auto --ephemeral -o /tmp/praxisgenai-sub4.md "prompt" &
-  wait
-  |-- Reads all output files
-  '-- Synthesizes results
+
+### Required Fields
+
+Every worker output includes: `contract_version`, `worker_id`, `task_id`, `status`, `executive_summary`, `ownership` (area, touched_paths, untouched_paths), `artifacts`, `findings`, `decisions`, `changes`, `verification` (performed, not_performed), `risks`, `next_recommended`.
+
+### Status Values
+
+| Status | Meaning |
+|--------|---------|
+| `success` | Task completed. `verification.performed` MUST be non-empty. |
+| `partial` | Partially done. Some work completed. |
+| `blocked` | Cannot proceed. Reason in `risks`. |
+
+### Validation Rules
+
+The orchestrator rejects output that has:
+- Invalid JSON (parse error)
+- Missing required fields
+- Status not in `["success", "partial", "blocked"]`
+- Paths in `touched_paths` outside declared `ownership.area`
+- Status `"success"` with empty `verification.performed`
+
+See `schemas/worker-output.example.json` for a concrete example.
+
+### Platform Notes
+
+**Windows (PowerShell):** Use `Start-Job` + `Wait-Job` with `codex.cmd`
+**Linux/Mac (bash):** Use `&` + `wait` with `codex`
+**Important:** `codex.ps1` may be blocked by execution policy. Always use `codex.cmd` on Windows.
+
+The bash `&` background operator does NOT work in PowerShell 5.1. On Windows, use `Start-Job` for parallelism. On Linux/Mac, use the traditional `&` + `wait` pattern.
+
+```powershell
+# Windows (PowerShell)
+$schema = "$HOME\.codex\schemas\worker-output.schema.json"
+
+$jobs = @()
+$jobs += Start-Job { & 'codex.cmd' exec --full-auto --ephemeral --output-schema $using:schema -o "$env:TEMP\praxisgenai-sub1.json" 'prompt' }
+$jobs += Start-Job { & 'codex.cmd' exec --full-auto --ephemeral --output-schema $using:schema -o "$env:TEMP\praxisgenai-sub2.json" 'prompt' }
+$jobs += Start-Job { & 'codex.cmd' exec --full-auto --ephemeral --output-schema $using:schema -o "$env:TEMP\praxisgenai-sub3.json" 'prompt' }
+$jobs += Start-Job { & 'codex.cmd' exec --full-auto --ephemeral --output-schema $using:schema -o "$env:TEMP\praxisgenai-sub4.json" 'prompt' }
+$jobs | Wait-Job
+Get-Content "$env:TEMP\praxisgenai-sub*.json" | ConvertFrom-Json
+Remove-Item "$env:TEMP\praxisgenai-sub*.json" -ErrorAction SilentlyContinue
+```
+
+```bash
+# Linux/Mac (bash)
+SCHEMA="$HOME/.codex/schemas/worker-output.schema.json"
+
+codex exec --full-auto --ephemeral --output-schema "$SCHEMA" -o /tmp/praxisgenai-sub1.json "prompt" &
+codex exec --full-auto --ephemeral --output-schema "$SCHEMA" -o /tmp/praxisgenai-sub2.json "prompt" &
+codex exec --full-auto --ephemeral --output-schema "$SCHEMA" -o /tmp/praxisgenai-sub3.json "prompt" &
+codex exec --full-auto --ephemeral --output-schema "$SCHEMA" -o /tmp/praxisgenai-sub4.json "prompt" &
+wait
+# Validate each result
+for f in /tmp/praxisgenai-sub*.json; do jq -e '.status' "$f" > /dev/null || echo "INVALID: $f"; done
+rm /tmp/praxisgenai-sub*.json
 ```
 
 ## How It Works in Codex
