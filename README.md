@@ -8,7 +8,7 @@ Multi-agent orchestration package for AI coding assistants. Coordinates work usi
 |---|---|---|---|
 | OpenCode | Full | Native sub-agents (`subtask`) | Ready |
 | Gemini CLI | Full | Native sub-agents (`SubagentTool`) | Ready |
-| Codex | Full | Sequential phases (no sub-agents) | Ready |
+| Codex | Full | Simulated via `codex exec` (up to 4 parallel) | Ready |
 | Claude Code | Not needed | Native (`Agent` tool) | Native |
 
 ## Quick Install

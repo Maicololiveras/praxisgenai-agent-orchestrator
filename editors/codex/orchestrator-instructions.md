@@ -1,33 +1,74 @@
-## Agent Teams Orchestrator (Codex Adaptation)
+## Agent Teams Orchestrator (Codex — Simulated Sub-Agents)
 
-You are a PHASED EXECUTOR. Codex does not have sub-agents. Instead, you execute work in structured phases, saving state to Engram between each phase.
+You CAN delegate work using `codex exec` as simulated sub-agents. Launch background processes, capture their output, and synthesize results.
 
-### Phase Execution Rules (ALWAYS ACTIVE)
+### Delegation Rules (ALWAYS ACTIVE)
 
-1. Execute ONE phase at a time. Do not try to do explore + propose + implement in one message.
-2. After each phase, SAVE results to Engram with the correct topic_key.
-3. Before each phase, LOAD prior artifacts from Engram.
-4. Keep responses focused on the current phase only.
+1. For substantial work (multi-file changes, exploration, analysis), delegate to `codex exec` sub-agents.
+2. Maximum 4 parallel sub-agents. Wait for all before continuing.
+3. For simple tasks (single file edit, quick answer), execute directly — no delegation needed.
+4. Save important discoveries to Engram after synthesizing results.
 
-### Anti-patterns (Codex-specific)
+### How to Delegate
 
-- DO NOT say "delegating to sub-agent" — you have no sub-agents.
-- DO NOT try to execute all SDD phases in one go — context will bloat.
-- DO NOT skip saving to Engram — the next phase depends on it.
+To spawn a sub-agent, use bash:
+```bash
+codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-sub1.md "YOUR PROMPT HERE" &
+```
 
-### Phase Flow
+To spawn multiple in parallel:
+```bash
+codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-sub1.md "Explore the auth module" &
+codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-sub2.md "Explore the database layer" &
+wait
+```
 
-The user triggers each phase:
-1. User: "explore the authentication system" → You: load sdd-explore skill, execute, save to engram
-2. User: "propose the change" → You: load proposal from engram, load sdd-propose skill, execute, save
-3. User: "create specs" → You: load proposal, load sdd-spec skill, execute, save
-4. Continue...
+To read results:
+```bash
+cat /tmp/praxisgenai-sub1.md
+cat /tmp/praxisgenai-sub2.md
+rm /tmp/praxisgenai-sub*.md
+```
+
+### Sub-Agent Prompt Template
+
+When delegating, include context in the prompt:
+```
+You are a sub-agent working on: {task description}.
+Project: {project name} at {working directory}.
+Prior context: {summary from engram or previous phase}.
+Your task: {specific task}.
+Return: status, executive_summary, files touched, risks, next steps.
+Save important discoveries to engram via mem_save with project: '{project}'.
+```
+
+### Anti-patterns
+
+- DO NOT launch more than 4 sub-agents at once
+- DO NOT forget to `wait` for all sub-agents before reading results
+- DO NOT skip `-o` flag — without it you can't capture output
+- DO NOT run sub-agents without `--ephemeral` — they'll create unnecessary sessions
+- DO NOT run complex multi-phase work in one sub-agent — split into separate sub-agents
 
 ### Task Escalation
 
-- **Simple question**: Answer if you know. If not, execute inline.
-- **Small task**: Execute directly — no phasing needed for single-file edits or quick fixes. Still save important discoveries to Engram.
-- **Substantial feature/refactor**: Suggest SDD: "This is a good candidate for structured planning. Want me to start with `/sdd-explore {topic}`?"
+- **Simple question**: Answer directly.
+- **Small task**: Execute directly, save discoveries to Engram.
+- **Medium task**: 1-2 sub-agents for exploration/implementation.
+- **Large task (SDD)**: Full SDD pipeline, one sub-agent per phase (sequential or parallel where possible).
+
+### SDD Phase Delegation
+
+For SDD phases, delegate each to a sub-agent:
+```bash
+# Explore phase
+codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-explore.md \
+  "Load skill sdd-explore from ~/.codex/skills/sdd-explore/SKILL.md. Explore: {topic}. Project: {project}. Save results to engram." &
+
+# After explore completes, propose phase
+codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-propose.md \
+  "Load skill sdd-propose from ~/.codex/skills/sdd-propose/SKILL.md. Load exploration from engram topic sdd/{change}/explore. Create proposal for: {change}." &
+```
 
 ### SDD Workflow (Spec-Driven Development)
 

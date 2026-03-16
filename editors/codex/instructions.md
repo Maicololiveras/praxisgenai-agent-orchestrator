@@ -154,28 +154,77 @@ Do not skip step 1. Without it, everything done before compaction is lost from m
 
 ---
 
-## Agent Teams Orchestrator
+## Agent Teams Orchestrator (Codex — Simulated Sub-Agents)
 
-You are a COORDINATOR. Delegate ALL real work to sub-agents. Keep this thread thin.
+You CAN delegate work using `codex exec` as simulated sub-agents. Launch background processes, capture their output, and synthesize results.
 
 ### Delegation Rules (ALWAYS ACTIVE)
 
-1. NEVER do real work inline (reading code, writing code, analyzing architecture, designing).
-2. You may: answer short questions, coordinate sub-agents, show summaries, ask for decisions.
-3. Self-check before every response: "Am I about to read/write code or analyze? If yes -> delegate."
+1. For substantial work (multi-file changes, exploration, analysis), delegate to `codex exec` sub-agents.
+2. Maximum 4 parallel sub-agents. Wait for all before continuing.
+3. For simple tasks (single file edit, quick answer), execute directly — no delegation needed.
+4. Save important discoveries to Engram after synthesizing results.
+
+### How to Delegate
+
+To spawn a sub-agent, use bash:
+```bash
+codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-sub1.md "YOUR PROMPT HERE" &
+```
+
+To spawn multiple in parallel:
+```bash
+codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-sub1.md "Explore the auth module" &
+codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-sub2.md "Explore the database layer" &
+wait
+```
+
+To read results:
+```bash
+cat /tmp/praxisgenai-sub1.md
+cat /tmp/praxisgenai-sub2.md
+rm /tmp/praxisgenai-sub*.md
+```
+
+### Sub-Agent Prompt Template
+
+When delegating, include context in the prompt:
+```
+You are a sub-agent working on: {task description}.
+Project: {project name} at {working directory}.
+Prior context: {summary from engram or previous phase}.
+Your task: {specific task}.
+Return: status, executive_summary, files touched, risks, next steps.
+Save important discoveries to engram via mem_save with project: '{project}'.
+```
 
 ### Anti-patterns
 
-- DO NOT read source code to "understand" the codebase — delegate.
-- DO NOT write or edit code — delegate.
-- DO NOT write specs, proposals, designs, or task breakdowns — delegate.
-- DO NOT do "quick" analysis inline — it bloats context.
+- DO NOT launch more than 4 sub-agents at once
+- DO NOT forget to `wait` for all sub-agents before reading results
+- DO NOT skip `-o` flag — without it you can't capture output
+- DO NOT run sub-agents without `--ephemeral` — they'll create unnecessary sessions
+- DO NOT run complex multi-phase work in one sub-agent — split into separate sub-agents
 
 ### Task Escalation
 
-- **Simple question**: Answer if you know. If not, delegate.
-- **Small task**: Delegate to a general sub-agent.
-- **Substantial feature/refactor**: Suggest SDD.
+- **Simple question**: Answer directly.
+- **Small task**: Execute directly, save discoveries to Engram.
+- **Medium task**: 1-2 sub-agents for exploration/implementation.
+- **Large task (SDD)**: Full SDD pipeline, one sub-agent per phase (sequential or parallel where possible).
+
+### SDD Phase Delegation
+
+For SDD phases, delegate each to a sub-agent:
+```bash
+# Explore phase
+codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-explore.md \
+  "Load skill sdd-explore from ~/.codex/skills/sdd-explore/SKILL.md. Explore: {topic}. Project: {project}. Save results to engram." &
+
+# After explore completes, propose phase
+codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-propose.md \
+  "Load skill sdd-propose from ~/.codex/skills/sdd-propose/SKILL.md. Load exploration from engram topic sdd/{change}/explore. Create proposal for: {change}." &
+```
 
 ### SDD Commands
 

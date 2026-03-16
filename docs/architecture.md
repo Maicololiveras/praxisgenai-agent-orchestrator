@@ -176,7 +176,7 @@ What differs per editor is the **delegation model** — how the orchestrator dis
 | **Claude Code** | Native sub-agents | Built-in `Agent` tool with typed sub-agents (Explore, Plan, general) | Full — each sub-agent gets fresh context |
 | **OpenCode** | Native sub-agents | `subtask: true` in command definitions spawns isolated agent contexts | Full — dedicated agent per SDD phase |
 | **Gemini CLI** | Native sub-agents | `SubagentTool` exposes sub-agents as callable tools; `activate_skill` loads skills dynamically | Full — isolated context with own tool permissions |
-| **Codex** | Sequential phases (NO sub-agents) | Single-agent, single-context; phases execute sequentially with Engram as state bridge | None — same context throughout |
+| **Codex** | Simulated sub-agents via `codex exec` | Spawns up to 4 background `codex exec` processes with `--full-auto --ephemeral -o`; reads output files and synthesizes | Full — each `codex exec` process gets fresh context |
 
 ### Why the models differ
 
@@ -184,24 +184,29 @@ Sub-agent support is a **runtime capability**, not a configuration choice:
 
 - **OpenCode** was designed with multi-agent orchestration in mind. Its `subtask` flag creates true isolated contexts.
 - **Gemini CLI** exposes sub-agents as tools (`SubagentTool`), making delegation a tool call rather than a conversation fork.
-- **Codex** is architecturally single-agent. It has no mechanism to spawn isolated sub-agents within a session. The workaround is to execute phases sequentially, using Engram to persist state between phases. This means context is shared (not isolated), so avoiding bloat is critical.
+- **Codex** is architecturally single-agent within a session, but can simulate sub-agents by spawning background `codex exec` processes. Each process runs with `--full-auto --ephemeral` and writes its output to a temp file via `-o`. The main Codex reads all outputs and synthesizes. This gives effective context isolation (each `codex exec` gets fresh context) with up to 4 parallel sub-agents.
 - **Claude Code** has the most complete native support — `Agent` tool with typed sub-agents, native skill loading, and Engram MCP plugin. This package is not needed for Claude Code.
 
-### Codex sequential pattern
+### Codex simulated sub-agent pattern
 
-Since Codex cannot delegate, the user drives the phase progression:
+Codex simulates sub-agents by spawning `codex exec` processes in background:
 
 ```
-User: /sdd-explore auth-system
-  → AI executes explore phase, saves artifact to Engram
-User: /sdd-propose auth-refactor
-  → AI loads explore from Engram, creates proposal, saves to Engram
-User: /sdd-spec auth-refactor
-  → AI loads proposal from Engram, creates spec, saves to Engram
-...
+Main Codex (interactive orchestrator)
+  |-- codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-sub1.md "explore prompt" &
+  |-- codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-sub2.md "analyze prompt" &
+  wait
+  |-- Reads /tmp/praxisgenai-sub1.md and /tmp/praxisgenai-sub2.md
+  '-- Synthesizes results, saves to Engram, cleans up temp files
 ```
 
-Each phase MUST save to Engram before completing. Each phase MUST load prior artifacts from Engram before starting. This makes Engram the critical state bridge that compensates for the lack of sub-agent isolation.
+Rules:
+- Maximum 4 parallel sub-agents
+- Always use `--ephemeral` (no session persistence) and `--full-auto` (no approval prompts)
+- Always use `-o <file>` to capture output
+- Each phase MUST save to Engram before completing
+- Each phase MUST load prior artifacts from Engram before starting
+- Engram remains the critical state bridge for cross-phase and cross-session continuity
 
 ### What differs per editor (configuration)
 - **Invocation**: OpenCode uses slash commands, Gemini/Codex use natural language.

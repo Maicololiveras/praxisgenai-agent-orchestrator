@@ -93,12 +93,38 @@ The assistant should confirm:
 - Engram MCP tools (`mem_save`, `mem_search`, `mem_get_observation`) are accessible
 - SDD workflow commands are understood
 
+## Simulated Sub-Agents
+
+Codex doesn't have native sub-agents, but the orchestrator simulates them using `codex exec`:
+
+1. Main Codex (interactive) runs as the orchestrator
+2. It spawns up to 4 `codex exec` processes in background
+3. Each process writes its output to `/tmp/praxisgenai-sub{N}.md`
+4. Main Codex reads all outputs and synthesizes
+
+This gives Codex effective multi-agent capability with:
+- Context isolation (each sub-agent has fresh context)
+- Parallel execution (up to 4 concurrent)
+- Clean output capture (via `-o` flag)
+- No session pollution (`--ephemeral`)
+
+```
+Main Codex (visible, interactive)
+  |-- codex exec --full-auto --ephemeral -o /tmp/praxisgenai-sub1.md "prompt" &
+  |-- codex exec --full-auto --ephemeral -o /tmp/praxisgenai-sub2.md "prompt" &
+  |-- codex exec --full-auto --ephemeral -o /tmp/praxisgenai-sub3.md "prompt" &
+  |-- codex exec --full-auto --ephemeral -o /tmp/praxisgenai-sub4.md "prompt" &
+  wait
+  |-- Reads all output files
+  '-- Synthesizes results
+```
+
 ## How It Works in Codex
 
-Codex uses a single-agent architecture with instructions-based orchestration:
+Codex uses a single-agent architecture with simulated sub-agent orchestration:
 
 1. **Instructions file**: The `orchestrator-instructions.md` gives Codex the delegation rules, SDD workflow definitions, and Engram protocol.
-2. **Sub-agent delegation**: Codex uses its native sub-agent/task primitives for bounded delegation.
+2. **Sub-agent delegation**: Codex simulates sub-agents by spawning `codex exec` processes in background with `--full-auto --ephemeral` flags.
 3. **Skill loading**: Sub-agents check for the skill registry (Engram or `.atl/skill-registry.md`) as their first step, then load relevant skills.
 4. **Engram persistence**: All SDD artifacts are persisted to Engram with deterministic topic keys.
 
@@ -153,5 +179,6 @@ Since Codex doesn't have slash commands, use natural language equivalents:
 ## Limitations vs OpenCode
 
 - **No slash commands**: All interaction is natural language. The orchestrator instructions teach Codex to recognize SDD intent.
-- **No separate agent definitions**: Codex runs a single agent with sub-agent delegation, rather than OpenCode's named agent roster.
+- **No separate agent definitions**: Codex runs a single agent with simulated sub-agents via `codex exec`, rather than OpenCode's named agent roster.
+- **Simulated sub-agents**: Sub-agents are `codex exec` background processes (max 4 parallel), not native isolated contexts like OpenCode's `subtask` flag.
 - **Config is TOML-based**: Codex uses `config.toml` rather than JSON for configuration.

@@ -115,21 +115,41 @@ The orchestrator adapts its behavior based on the runtime's actual capabilities:
 - Use `enter_plan_mode` for structured planning before implementation
 - The orchestrator invokes skills directly, each running in isolated context
 
-### Codex (NO sub-agents — sequential phases)
-- Codex is single-agent, single-context. It CANNOT delegate.
-- **Workaround**: Execute phases SEQUENTIALLY in the same context
-  1. User runs `/sdd-explore <topic>` → AI executes explore, saves to Engram
-  2. User runs `/sdd-propose <change>` → AI reads explore from Engram, creates proposal
-  3. Continue phase by phase
-- Each phase MUST save its output to Engram before finishing
-- Each phase MUST load prior artifacts from Engram before starting
-- There is NO context isolation — avoid bloating context with inline work
-- Alternative: Use `codex exec "phase prompt"` from an external script for pseudo-delegation
+### Codex (Simulated Sub-Agents via `codex exec`)
+- Codex has NO native sub-agents, but can SIMULATE them using `codex exec` in background
+- The main Codex spawns up to **4 parallel** `codex exec` processes
+- Each sub-process writes its result to a temp file via `-o` flag
+- Main Codex reads all output files and synthesizes
+
+**How to delegate in Codex:**
+```bash
+# Launch up to 4 sub-agents in parallel
+codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-sub1.md "PROMPT FOR TASK 1" &
+codex exec --full-auto --ephemeral -C "$(pwd)" -o /tmp/praxisgenai-sub2.md "PROMPT FOR TASK 2" &
+wait
+# Read results
+cat /tmp/praxisgenai-sub1.md
+cat /tmp/praxisgenai-sub2.md
+```
+
+**Rules:**
+- Maximum 4 parallel sub-agents (to avoid saturating the machine)
+- Always use `--ephemeral` (no session persistence for sub-agents)
+- Always use `--full-auto` (no approval prompts)
+- Always use `-C "$(pwd)"` (same working directory)
+- Always use `-o <file>` (capture output to file)
+- Use `/tmp/praxisgenai-sub{N}.md` naming convention
+- Clean up temp files after reading
+- If a sub-agent fails, read its output for error info
+
+**For sequential phases (when parallelism doesn't help):**
+- Still use `codex exec` but run one at a time
+- Save results to Engram between phases for cross-session continuity
 
 ### Detection Rule
-If you are running in an editor without sub-agents:
-- Do NOT say "delegating to sub-agent" — there are no sub-agents
-- Instead say "executing phase X" and run the skill inline
+If you are running in an editor without native sub-agents:
+- In Codex: use `codex exec` to simulate sub-agents (see Codex section above)
+- In other editors without sub-agents: execute phases inline sequentially
 - ALWAYS save results to Engram after each phase
 - ALWAYS load prior artifacts from Engram before each phase
 
