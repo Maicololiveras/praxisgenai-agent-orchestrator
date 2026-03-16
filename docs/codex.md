@@ -53,14 +53,24 @@ Copy-Item editors\codex\orchestrator-instructions.md "$env:APPDATA\codex\orchest
 
 ### Step 4: Update config.toml
 
-Edit your Codex config file (`~/.codex/config.toml` on Linux/macOS, `%APPDATA%/codex/config.toml` on Windows):
+**Important:** Codex reads its config from `~/.codex/config.toml` on **all platforms** (including Windows). This is `$HOME/.codex/config.toml`, NOT `%APPDATA%/codex/config.toml`.
+
+The instruction **files** live in a separate location:
+- **Windows:** `%APPDATA%/codex/` (e.g. `C:\Users\you\AppData\Roaming\codex\`)
+- **Linux/macOS:** `~/.config/codex/`
+
+The `model_instructions_file` key in the config uses a **full path** to point from the config to the instruction files.
+
+Edit `~/.codex/config.toml`:
 
 ```toml
-# Point to the orchestrator instructions
-model_instructions_file = "~/.codex/orchestrator-instructions.md"
+# Windows — use full path with escaped backslashes
+model_instructions_file = "C:\\Users\\you\\AppData\\Roaming\\codex\\instructions.md"
+experimental_compact_prompt_file = "C:\\Users\\you\\AppData\\Roaming\\codex\\engram-compact-prompt.md"
 
-# If you have existing instructions, APPEND the orchestrator content
-# to your existing file instead of replacing model_instructions_file.
+# Linux/macOS — use full path
+# model_instructions_file = "/home/you/.config/codex/instructions.md"
+# experimental_compact_prompt_file = "/home/you/.config/codex/engram-compact-prompt.md"
 
 # Engram MCP server
 [mcp_servers.engram]
@@ -68,25 +78,7 @@ command = "engram"
 args = ["mcp", "--tools=agent"]
 ```
 
-If you already have a `model_instructions_file`, append the content of `orchestrator-instructions.md` to your existing instructions file rather than replacing it.
-
-### Step 5: (Optional) Add compact prompt for Engram
-
-If you use Engram's compaction feature, copy the compact prompt:
-
-```bash
-# Linux / macOS
-cp editors/codex/orchestrator-instructions.md ~/.codex/engram-compact-prompt.md
-
-# Windows (PowerShell)
-# The compact prompt is a separate concern; configure it per Engram docs.
-```
-
-And add to `config.toml`:
-
-```toml
-experimental_compact_prompt_file = "~/.codex/engram-compact-prompt.md"
-```
+If you already have a `model_instructions_file`, append the content of `instructions.md` to your existing instructions file rather than replacing it.
 
 ## Verify Installation
 

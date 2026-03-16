@@ -327,22 +327,53 @@ function Install-Codex {
     Copy-SingleFile -Source $compactSrc -Destination $compactDst
     Write-Step "Copied engram-compact-prompt.md -> $compactDst"
 
-    # 5. Check config.toml for model_instructions_file
-    $configToml = Join-Path $Targets.codex_config "config.toml"
-    if (Test-Path $configToml) {
-        $configContent = Get-Content $configToml -Raw
-        if ($configContent -and $configContent.Contains("model_instructions_file")) {
-            Write-Info "config.toml already has model_instructions_file setting."
-        } else {
-            Write-Host ""
-            Write-Info "NOTE: Add this to your config.toml ($configToml):"
-            Write-Info '  model_instructions_file = "instructions.md"'
-        }
+    # 5. Write config entries to ~/.codex/config.toml (Codex reads config from $HOME/.codex/)
+    #    Instruction FILES stay in %APPDATA%/codex/ — the config just points to them.
+    $codexConfigDir = Join-Path $HomePath ".codex"
+    $configToml = Join-Path $codexConfigDir "config.toml"
+
+    # Resolve full paths to instruction files (in %APPDATA%/codex/)
+    $instrFullPath = (Join-Path $Targets.codex_config "instructions.md") -replace '\\', '\\'
+    $compactFullPath = (Join-Path $Targets.codex_config "engram-compact-prompt.md") -replace '\\', '\\'
+
+    if ($DryRun) {
+        Write-Info "[DRY RUN] Would ensure config entries in $configToml"
+        Write-Info "  model_instructions_file = `"$instrFullPath`""
+        Write-Info "  experimental_compact_prompt_file = `"$compactFullPath`""
     } else {
-        Write-Host ""
-        Write-Info "NOTE: config.toml not found at $configToml"
-        Write-Info "Create it and add:"
-        Write-Info '  model_instructions_file = "instructions.md"'
+        if (-not (Test-Path $codexConfigDir)) {
+            New-Item -ItemType Directory -Path $codexConfigDir -Force | Out-Null
+        }
+
+        $configContent = ""
+        if (Test-Path $configToml) {
+            $configContent = Get-Content $configToml -Raw
+            if (-not $configContent) { $configContent = "" }
+        }
+
+        $changed = $false
+
+        # Add model_instructions_file if not present
+        if (-not ($configContent -match "model_instructions_file")) {
+            $configContent = $configContent.TrimEnd() + "`nmodel_instructions_file = `"$instrFullPath`"`n"
+            $changed = $true
+            Write-Step "Added model_instructions_file to $configToml"
+        } else {
+            Write-Info "model_instructions_file already set in $configToml"
+        }
+
+        # Add experimental_compact_prompt_file if not present
+        if (-not ($configContent -match "experimental_compact_prompt_file")) {
+            $configContent = $configContent.TrimEnd() + "`nexperimental_compact_prompt_file = `"$compactFullPath`"`n"
+            $changed = $true
+            Write-Step "Added experimental_compact_prompt_file to $configToml"
+        } else {
+            Write-Info "experimental_compact_prompt_file already set in $configToml"
+        }
+
+        if ($changed) {
+            Set-Content -Path $configToml -Value $configContent -Encoding UTF8
+        }
     }
 
     Write-Host "[Codex] Done!" -ForegroundColor Green

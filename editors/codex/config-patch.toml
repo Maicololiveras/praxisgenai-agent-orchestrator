@@ -1,17 +1,27 @@
 # Codex Config Patch
 #
-# Add these entries to your ~/.codex/config.toml (or %APPDATA%/codex/config.toml on Windows).
+# IMPORTANT: Codex reads its config from ~/.codex/config.toml on ALL platforms.
+# This is $HOME/.codex/config.toml — NOT %APPDATA%/codex/config.toml on Windows.
+#
+# The instruction FILES live in:
+#   - Windows: %APPDATA%/codex/  (e.g. C:\Users\you\AppData\Roaming\codex\)
+#   - Linux/macOS: ~/.config/codex/
+#
+# The config.toml entries below use FULL PATHS to point to those instruction files.
 #
 # If you already have model_instructions_file, APPEND the orchestrator content
 # to your existing instructions file instead of replacing it.
 #
 # If you already have [mcp_servers.engram], skip that section.
 
-# Point Codex to the orchestrator instructions file.
-# Option A: Use the installed copy directly
-# model_instructions_file = "~/.codex/orchestrator-instructions.md"
+# Point Codex to the orchestrator instructions file (use full path to %APPDATA%/codex/ on Windows)
+# Windows example:
+# model_instructions_file = "C:\\Users\\you\\AppData\\Roaming\\codex\\instructions.md"
+# experimental_compact_prompt_file = "C:\\Users\\you\\AppData\\Roaming\\codex\\engram-compact-prompt.md"
 #
-# Option B: If you have a combined instructions file, append orchestrator-instructions.md content to it.
+# Linux/macOS example:
+# model_instructions_file = "/home/you/.config/codex/instructions.md"
+# experimental_compact_prompt_file = "/home/you/.config/codex/engram-compact-prompt.md"
 
 # Engram MCP server (required for persistent memory across sessions)
 [mcp_servers.engram]

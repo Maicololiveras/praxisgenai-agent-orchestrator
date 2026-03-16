@@ -110,9 +110,11 @@ curl -sSL https://raw.githubusercontent.com/Maicololiveras/praxisgenai-agent-orc
 
 **Codex:**
 - Skills → ~/.codex/skills/
-- instructions.md → %APPDATA%/codex/instructions.md (personality + engram + orchestrator)
-- engram-instructions.md → %APPDATA%/codex/
-- engram-compact-prompt.md → %APPDATA%/codex/
+- Config → ~/.codex/config.toml (ALL platforms, NOT %APPDATA%)
+- instructions.md → %APPDATA%/codex/ (Windows) or ~/.config/codex/ (Linux/Mac)
+- engram-instructions.md → %APPDATA%/codex/ (Windows) or ~/.config/codex/ (Linux/Mac)
+- engram-compact-prompt.md → %APPDATA%/codex/ (Windows) or ~/.config/codex/ (Linux/Mac)
+- config.toml `model_instructions_file` points from config to instruction files with full path
 
 ## Architecture
 

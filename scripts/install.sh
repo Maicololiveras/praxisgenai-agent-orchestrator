@@ -292,21 +292,41 @@ install_codex() {
     copy_file "$compact_src" "$compact_dst"
     step "Copied engram-compact-prompt.md -> $compact_dst"
 
-    # 5. Check config.toml for model_instructions_file
-    local config_toml="$TARGET_CODEX_CONFIG/config.toml"
-    if [[ -f "$config_toml" ]]; then
-        if grep -q "model_instructions_file" "$config_toml" 2>/dev/null; then
-            info "config.toml already has model_instructions_file setting."
-        else
-            echo ""
-            info "NOTE: Add this to your config.toml ($config_toml):"
-            info '  model_instructions_file = "instructions.md"'
-        fi
+    # 5. Write config entries to ~/.codex/config.toml (Codex reads config from $HOME/.codex/)
+    #    Instruction FILES stay in ~/.config/codex/ — the config just points to them.
+    local codex_config_dir="$HOME_DIR/.codex"
+    local config_toml="$codex_config_dir/config.toml"
+
+    # Resolve full paths to instruction files (in ~/.config/codex/)
+    local instr_full_path="$TARGET_CODEX_CONFIG/instructions.md"
+    local compact_full_path="$TARGET_CODEX_CONFIG/engram-compact-prompt.md"
+
+    if [[ "${DRY_RUN:-false}" == "true" ]]; then
+        info "[DRY RUN] Would ensure config entries in $config_toml"
+        info "  model_instructions_file = \"$instr_full_path\""
+        info "  experimental_compact_prompt_file = \"$compact_full_path\""
     else
-        echo ""
-        info "NOTE: config.toml not found at $config_toml"
-        info "Create it and add:"
-        info '  model_instructions_file = "instructions.md"'
+        mkdir -p "$codex_config_dir"
+
+        if [[ ! -f "$config_toml" ]]; then
+            touch "$config_toml"
+        fi
+
+        # Add model_instructions_file if not present
+        if grep -q "model_instructions_file" "$config_toml" 2>/dev/null; then
+            info "model_instructions_file already set in $config_toml"
+        else
+            echo "model_instructions_file = \"$instr_full_path\"" >> "$config_toml"
+            step "Added model_instructions_file to $config_toml"
+        fi
+
+        # Add experimental_compact_prompt_file if not present
+        if grep -q "experimental_compact_prompt_file" "$config_toml" 2>/dev/null; then
+            info "experimental_compact_prompt_file already set in $config_toml"
+        else
+            echo "experimental_compact_prompt_file = \"$compact_full_path\"" >> "$config_toml"
+            step "Added experimental_compact_prompt_file to $config_toml"
+        fi
     fi
 
     echo -e "${GREEN}[Codex] Done!${NC}"
