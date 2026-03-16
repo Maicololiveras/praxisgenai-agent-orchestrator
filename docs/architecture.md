@@ -167,9 +167,44 @@ All three supported editors (OpenCode, Gemini CLI, Codex) use the same:
 - **Engram protocol**: Same topic keys, same two-step retrieval, same persistence contract.
 - **SDD pipeline**: Same phases, same dependency graph, same artifact formats.
 
-What differs per editor:
+What differs per editor is the **delegation model** — how the orchestrator dispatches work:
+
+### Delegation Models
+
+| Editor | Delegation Model | Mechanism | Context Isolation |
+|--------|-----------------|-----------|-------------------|
+| **Claude Code** | Native sub-agents | Built-in `Agent` tool with typed sub-agents (Explore, Plan, general) | Full — each sub-agent gets fresh context |
+| **OpenCode** | Native sub-agents | `subtask: true` in command definitions spawns isolated agent contexts | Full — dedicated agent per SDD phase |
+| **Gemini CLI** | Native sub-agents | `SubagentTool` exposes sub-agents as callable tools; `activate_skill` loads skills dynamically | Full — isolated context with own tool permissions |
+| **Codex** | Sequential phases (NO sub-agents) | Single-agent, single-context; phases execute sequentially with Engram as state bridge | None — same context throughout |
+
+### Why the models differ
+
+Sub-agent support is a **runtime capability**, not a configuration choice:
+
+- **OpenCode** was designed with multi-agent orchestration in mind. Its `subtask` flag creates true isolated contexts.
+- **Gemini CLI** exposes sub-agents as tools (`SubagentTool`), making delegation a tool call rather than a conversation fork.
+- **Codex** is architecturally single-agent. It has no mechanism to spawn isolated sub-agents within a session. The workaround is to execute phases sequentially, using Engram to persist state between phases. This means context is shared (not isolated), so avoiding bloat is critical.
+- **Claude Code** has the most complete native support — `Agent` tool with typed sub-agents, native skill loading, and Engram MCP plugin. This package is not needed for Claude Code.
+
+### Codex sequential pattern
+
+Since Codex cannot delegate, the user drives the phase progression:
+
+```
+User: /sdd-explore auth-system
+  → AI executes explore phase, saves artifact to Engram
+User: /sdd-propose auth-refactor
+  → AI loads explore from Engram, creates proposal, saves to Engram
+User: /sdd-spec auth-refactor
+  → AI loads proposal from Engram, creates spec, saves to Engram
+...
+```
+
+Each phase MUST save to Engram before completing. Each phase MUST load prior artifacts from Engram before starting. This makes Engram the critical state bridge that compensates for the lack of sub-agent isolation.
+
+### What differs per editor (configuration)
 - **Invocation**: OpenCode uses slash commands, Gemini/Codex use natural language.
-- **Delegation**: OpenCode has named agents, Codex has sub-agents, Gemini uses Task tool or inline execution.
 - **Configuration**: OpenCode uses JSON, Codex uses TOML, Gemini uses markdown rules.
 
-The skills layer abstracts these differences. A skill written once works in all three editors.
+The skills layer abstracts these differences. A skill written once works in all editors.

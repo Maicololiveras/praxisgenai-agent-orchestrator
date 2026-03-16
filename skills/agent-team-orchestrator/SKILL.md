@@ -94,6 +94,45 @@ next_recommended: []
 memory_saved: []
 ```
 
+## Delegation Model per Editor
+
+The orchestrator adapts its behavior based on the runtime's actual capabilities:
+
+### Claude Code (native — no orchestrator needed)
+- Uses built-in `Agent` tool with typed sub-agents (Explore, Plan, general)
+- Full context isolation per sub-agent
+- This skill is NOT needed in Claude Code
+
+### OpenCode (full sub-agent support)
+- Uses `subtask: true` in command definitions to spawn isolated agent contexts
+- Each SDD phase runs as a dedicated agent with its own system prompt
+- The orchestrator delegates via slash commands: `/sdd-explore`, `/sdd-apply`, etc.
+- Results flow back through the conversation
+
+### Gemini CLI (sub-agent via tools)
+- Uses `SubagentTool` — sub-agents are exposed as callable tools
+- Skills can be loaded dynamically with `activate_skill`
+- Use `enter_plan_mode` for structured planning before implementation
+- The orchestrator invokes skills directly, each running in isolated context
+
+### Codex (NO sub-agents — sequential phases)
+- Codex is single-agent, single-context. It CANNOT delegate.
+- **Workaround**: Execute phases SEQUENTIALLY in the same context
+  1. User runs `/sdd-explore <topic>` → AI executes explore, saves to Engram
+  2. User runs `/sdd-propose <change>` → AI reads explore from Engram, creates proposal
+  3. Continue phase by phase
+- Each phase MUST save its output to Engram before finishing
+- Each phase MUST load prior artifacts from Engram before starting
+- There is NO context isolation — avoid bloating context with inline work
+- Alternative: Use `codex exec "phase prompt"` from an external script for pseudo-delegation
+
+### Detection Rule
+If you are running in an editor without sub-agents:
+- Do NOT say "delegating to sub-agent" — there are no sub-agents
+- Instead say "executing phase X" and run the skill inline
+- ALWAYS save results to Engram after each phase
+- ALWAYS load prior artifacts from Engram before each phase
+
 ## Commands
 
 ```bash

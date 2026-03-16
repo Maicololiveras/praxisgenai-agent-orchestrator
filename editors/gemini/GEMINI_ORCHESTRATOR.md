@@ -62,6 +62,13 @@ proposal -> specs --> tasks -> apply -> verify -> archive
 ### Result Contract
 Each phase returns: `status`, `executive_summary`, `artifacts`, `next_recommended`, `risks`.
 
+### Gemini-Specific Delegation
+Gemini CLI has native sub-agent support via SubagentTool. When delegating:
+- Use `activate_skill` to load the relevant SDD skill
+- Use `enter_plan_mode` before substantial changes
+- Sub-agents run in isolated context with their own tool permissions
+- Save results to Engram for cross-phase continuity
+
 ### Sub-Agent Launch Pattern
 Include a SKILL LOADING section in the sub-agent prompt (between TASK and PERSISTENCE):
 ```

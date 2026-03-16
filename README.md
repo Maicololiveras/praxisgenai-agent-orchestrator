@@ -4,12 +4,12 @@ Multi-agent orchestration package for AI coding assistants. Coordinates work usi
 
 ## Supported Editors
 
-| Editor | Install | Status |
-|---|---|---|
-| OpenCode | Full (personality + skills + orchestrator) | Ready |
-| Gemini CLI | Full (personality + skills + orchestrator) | Ready |
-| Codex | Full (personality + skills + orchestrator) | Ready |
-| Claude Code | Not needed (native support) | Native |
+| Editor | Install | Delegation | Status |
+|---|---|---|---|
+| OpenCode | Full | Native sub-agents (`subtask`) | Ready |
+| Gemini CLI | Full | Native sub-agents (`SubagentTool`) | Ready |
+| Codex | Full | Sequential phases (no sub-agents) | Ready |
+| Claude Code | Not needed | Native (`Agent` tool) | Native |
 
 ## Quick Install
 
