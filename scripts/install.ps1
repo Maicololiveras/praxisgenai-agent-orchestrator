@@ -169,6 +169,25 @@ function Install-OpenCode {
         -PatchFile "$RepoRoot/editors/opencode/opencode.agents.json" `
         -TargetFile "$target/opencode.json"
 
+    # 5. Copy AGENTS.md (personality + orchestrator)
+    $agentsMdSrc = "$RepoRoot/editors/opencode/AGENTS.md"
+    $agentsMdDst = Join-Path $target "AGENTS.md"
+
+    if (-not (Test-Path $agentsMdSrc)) {
+        Write-Warning "AGENTS.md not found in repo: $agentsMdSrc"
+    } elseif ($DryRun) {
+        Write-Info "[DRY RUN] Would copy AGENTS.md to $agentsMdDst"
+    } else {
+        if (Test-Path $agentsMdDst) {
+            $existingContent = Get-Content $agentsMdDst -Raw
+            if ($existingContent -and $existingContent.Contains($MARKER)) {
+                Write-Info "AGENTS.md already has orchestrator marker, replacing with full version..."
+            }
+        }
+        Copy-Item -Path $agentsMdSrc -Destination $agentsMdDst -Force
+        Write-Step "Copied AGENTS.md -> $agentsMdDst"
+    }
+
     Write-Host "[OpenCode] Done!" -ForegroundColor Green
 }
 
@@ -180,35 +199,60 @@ function Install-Gemini {
     Copy-Directory -Source "$RepoRoot/skills" -Destination "$target/skills"
     Write-Step "Copied skills/ -> $target/skills/"
 
-    # 2. Append orchestrator rules to GEMINI.md
+    # 2. Handle GEMINI.md (personality + orchestrator)
     $geminiMd = Join-Path $target "GEMINI.md"
     $orchestratorMd = "$RepoRoot/editors/gemini/GEMINI_ORCHESTRATOR.md"
+    $personalityMd = "$RepoRoot/editors/gemini/GEMINI_PERSONALITY.md"
 
-    if (-not (Test-Path $orchestratorMd)) {
-        Write-Warning "Orchestrator file not found: $orchestratorMd"
+    if ($DryRun) {
+        Write-Info "[DRY RUN] Would configure GEMINI.md at $geminiMd"
     } else {
-        if ($DryRun) {
-            Write-Info "[DRY RUN] Would append orchestrator rules to $geminiMd"
+        if (-not (Test-Path $target)) {
+            New-Item -ItemType Directory -Path $target -Force | Out-Null
+        }
+
+        if (-not (Test-Path $geminiMd)) {
+            # GEMINI.md does not exist — create from personality + orchestrator
+            $newContent = ""
+            if (Test-Path $personalityMd) {
+                $newContent += (Get-Content $personalityMd -Raw)
+            }
+            if (Test-Path $orchestratorMd) {
+                $orchestratorContent = Get-Content $orchestratorMd -Raw
+                $newContent += "`n`n$MARKER`n$orchestratorContent`n"
+            }
+            Set-Content -Path $geminiMd -Value $newContent -Encoding UTF8
+            Write-Step "Created GEMINI.md with personality + orchestrator at $geminiMd"
         } else {
-            if (-not (Test-Path $target)) {
-                New-Item -ItemType Directory -Path $target -Force | Out-Null
-            }
+            $existingContent = Get-Content $geminiMd -Raw
 
-            $alreadyAppended = $false
-            if (Test-Path $geminiMd) {
-                $existingContent = Get-Content $geminiMd -Raw
-                if ($existingContent -and $existingContent.Contains($MARKER)) {
-                    $alreadyAppended = $true
+            # Check and prepend personality if missing
+            if ($existingContent -and -not $existingContent.Contains("## Personality")) {
+                if (Test-Path $personalityMd) {
+                    $personalityContent = Get-Content $personalityMd -Raw
+                    $existingContent = $personalityContent + "`n`n" + $existingContent
+                    Set-Content -Path $geminiMd -Value $existingContent -Encoding UTF8
+                    Write-Step "Prepended personality section to GEMINI.md"
                 }
+            } else {
+                Write-Info "Personality section already present in GEMINI.md."
             }
 
-            if ($alreadyAppended) {
+            # Reload content after potential personality prepend
+            $existingContent = Get-Content $geminiMd -Raw
+
+            # Append orchestrator if not present
+            if ($existingContent -and $existingContent.Contains($MARKER)) {
                 Write-Info "Orchestrator rules already present in GEMINI.md, skipping append."
             } else {
-                $orchestratorContent = Get-Content $orchestratorMd -Raw
-                $appendBlock = "`n`n$MARKER`n$orchestratorContent`n"
-                Add-Content -Path $geminiMd -Value $appendBlock -Encoding UTF8
-                Write-Step "Appended orchestrator rules to $geminiMd"
+                if (Test-Path $orchestratorMd) {
+                    $orchestratorContent = Get-Content $orchestratorMd -Raw
+                    $appendBlock = "`n`n$MARKER`n$orchestratorContent`n"
+                    Add-Content -Path $geminiMd -Value $appendBlock -Encoding UTF8
+                    Write-Step "Appended orchestrator rules to $geminiMd"
+                } else {
+                    Write-Warning "Orchestrator file not found: $orchestratorMd"
+                }
             }
         }
     }
@@ -265,18 +309,43 @@ function Install-Codex {
     Copy-Directory -Source "$RepoRoot/skills" -Destination "$($Targets.codex_skills)/skills"
     Write-Step "Copied skills/ -> $($Targets.codex_skills)/skills/"
 
-    # 2. Copy orchestrator instructions
-    $instrSrc = "$RepoRoot/editors/codex/orchestrator-instructions.md"
-    $instrDst = Join-Path $Targets.codex_config "orchestrator-instructions.md"
+    # 2. Copy full instructions.md (personality + engram + orchestrator)
+    $instrSrc = "$RepoRoot/editors/codex/instructions.md"
+    $instrDst = Join-Path $Targets.codex_config "instructions.md"
     Copy-SingleFile -Source $instrSrc -Destination $instrDst
-    Write-Step "Copied orchestrator-instructions.md -> $instrDst"
+    Write-Step "Copied instructions.md -> $instrDst"
+
+    # 3. Copy engram-instructions.md
+    $engramSrc = "$RepoRoot/editors/codex/engram-instructions.md"
+    $engramDst = Join-Path $Targets.codex_config "engram-instructions.md"
+    Copy-SingleFile -Source $engramSrc -Destination $engramDst
+    Write-Step "Copied engram-instructions.md -> $engramDst"
+
+    # 4. Copy engram-compact-prompt.md
+    $compactSrc = "$RepoRoot/editors/codex/engram-compact-prompt.md"
+    $compactDst = Join-Path $Targets.codex_config "engram-compact-prompt.md"
+    Copy-SingleFile -Source $compactSrc -Destination $compactDst
+    Write-Step "Copied engram-compact-prompt.md -> $compactDst"
+
+    # 5. Check config.toml for model_instructions_file
+    $configToml = Join-Path $Targets.codex_config "config.toml"
+    if (Test-Path $configToml) {
+        $configContent = Get-Content $configToml -Raw
+        if ($configContent -and $configContent.Contains("model_instructions_file")) {
+            Write-Info "config.toml already has model_instructions_file setting."
+        } else {
+            Write-Host ""
+            Write-Info "NOTE: Add this to your config.toml ($configToml):"
+            Write-Info '  model_instructions_file = "instructions.md"'
+        }
+    } else {
+        Write-Host ""
+        Write-Info "NOTE: config.toml not found at $configToml"
+        Write-Info "Create it and add:"
+        Write-Info '  model_instructions_file = "instructions.md"'
+    }
 
     Write-Host "[Codex] Done!" -ForegroundColor Green
-    Write-Host ""
-    Write-Info "NOTE: You must manually add this to your Codex config.toml:"
-    Write-Info '  [instructions]'
-    Write-Info '  files = ["orchestrator-instructions.md"]'
-    Write-Info "  Config location: $($Targets.codex_config)/config.toml"
 }
 
 # --- Main ---

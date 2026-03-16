@@ -142,6 +142,23 @@ install_opencode() {
         "$REPO_ROOT/editors/opencode/opencode.agents.json" \
         "$TARGET_OPENCODE/opencode.json"
 
+    # 5. Copy AGENTS.md (personality + orchestrator)
+    local agents_src="$REPO_ROOT/editors/opencode/AGENTS.md"
+    local agents_dst="$TARGET_OPENCODE/AGENTS.md"
+
+    if [[ ! -f "$agents_src" ]]; then
+        echo -e "  ${RED}Warning:${NC} AGENTS.md not found in repo: $agents_src"
+    elif [[ "${DRY_RUN:-false}" == "true" ]]; then
+        info "[DRY RUN] Would copy AGENTS.md to $agents_dst"
+    else
+        if [[ -f "$agents_dst" ]] && grep -qF "$MARKER" "$agents_dst" 2>/dev/null; then
+            info "AGENTS.md already has orchestrator marker, replacing with full version..."
+        fi
+        mkdir -p "$(dirname "$agents_dst")"
+        cp "$agents_src" "$agents_dst"
+        step "Copied AGENTS.md -> $agents_dst"
+    fi
+
     echo -e "${GREEN}[OpenCode] Done!${NC}"
 }
 
@@ -152,27 +169,65 @@ install_gemini() {
     copy_directory "$REPO_ROOT/skills" "$TARGET_GEMINI/skills"
     step "Copied skills/ -> $TARGET_GEMINI/skills/"
 
-    # 2. Append orchestrator rules to GEMINI.md
+    # 2. Handle GEMINI.md (personality + orchestrator)
     local gemini_md="$TARGET_GEMINI/GEMINI.md"
     local orchestrator_md="$REPO_ROOT/editors/gemini/GEMINI_ORCHESTRATOR.md"
+    local personality_md="$REPO_ROOT/editors/gemini/GEMINI_PERSONALITY.md"
 
-    if [[ ! -f "$orchestrator_md" ]]; then
-        echo -e "  ${RED}Warning:${NC} Orchestrator file not found: $orchestrator_md"
-    elif [[ "${DRY_RUN:-false}" == "true" ]]; then
-        info "[DRY RUN] Would append orchestrator rules to $gemini_md"
+    if [[ "${DRY_RUN:-false}" == "true" ]]; then
+        info "[DRY RUN] Would configure GEMINI.md at $gemini_md"
     else
         mkdir -p "$TARGET_GEMINI"
-        if [[ -f "$gemini_md" ]] && grep -qF "$MARKER" "$gemini_md" 2>/dev/null; then
-            info "Orchestrator rules already present in GEMINI.md, skipping append."
+
+        if [[ ! -f "$gemini_md" ]]; then
+            # GEMINI.md does not exist — create from personality + orchestrator
+            local new_content=""
+            if [[ -f "$personality_md" ]]; then
+                new_content="$(cat "$personality_md")"
+            fi
+            if [[ -f "$orchestrator_md" ]]; then
+                new_content="${new_content}
+
+${MARKER}
+$(cat "$orchestrator_md")
+"
+            fi
+            echo "$new_content" > "$gemini_md"
+            step "Created GEMINI.md with personality + orchestrator at $gemini_md"
         else
-            {
-                echo ""
-                echo ""
-                echo "$MARKER"
-                cat "$orchestrator_md"
-                echo ""
-            } >> "$gemini_md"
-            step "Appended orchestrator rules to $gemini_md"
+            # Check and prepend personality if missing
+            if ! grep -q "## Personality" "$gemini_md" 2>/dev/null; then
+                if [[ -f "$personality_md" ]]; then
+                    local tmp_file
+                    tmp_file="$(mktemp)"
+                    {
+                        cat "$personality_md"
+                        echo ""
+                        echo ""
+                        cat "$gemini_md"
+                    } > "$tmp_file"
+                    mv "$tmp_file" "$gemini_md"
+                    step "Prepended personality section to GEMINI.md"
+                fi
+            else
+                info "Personality section already present in GEMINI.md."
+            fi
+
+            # Append orchestrator if not present
+            if grep -qF "$MARKER" "$gemini_md" 2>/dev/null; then
+                info "Orchestrator rules already present in GEMINI.md, skipping append."
+            elif [[ -f "$orchestrator_md" ]]; then
+                {
+                    echo ""
+                    echo ""
+                    echo "$MARKER"
+                    cat "$orchestrator_md"
+                    echo ""
+                } >> "$gemini_md"
+                step "Appended orchestrator rules to $gemini_md"
+            else
+                echo -e "  ${RED}Warning:${NC} Orchestrator file not found: $orchestrator_md"
+            fi
         fi
     fi
 
@@ -219,18 +274,42 @@ install_codex() {
     copy_directory "$REPO_ROOT/skills" "$TARGET_CODEX_SKILLS/skills"
     step "Copied skills/ -> $TARGET_CODEX_SKILLS/skills/"
 
-    # 2. Copy orchestrator instructions
-    local instr_src="$REPO_ROOT/editors/codex/orchestrator-instructions.md"
-    local instr_dst="$TARGET_CODEX_CONFIG/orchestrator-instructions.md"
+    # 2. Copy full instructions.md (personality + engram + orchestrator)
+    local instr_src="$REPO_ROOT/editors/codex/instructions.md"
+    local instr_dst="$TARGET_CODEX_CONFIG/instructions.md"
     copy_file "$instr_src" "$instr_dst"
-    step "Copied orchestrator-instructions.md -> $instr_dst"
+    step "Copied instructions.md -> $instr_dst"
+
+    # 3. Copy engram-instructions.md
+    local engram_src="$REPO_ROOT/editors/codex/engram-instructions.md"
+    local engram_dst="$TARGET_CODEX_CONFIG/engram-instructions.md"
+    copy_file "$engram_src" "$engram_dst"
+    step "Copied engram-instructions.md -> $engram_dst"
+
+    # 4. Copy engram-compact-prompt.md
+    local compact_src="$REPO_ROOT/editors/codex/engram-compact-prompt.md"
+    local compact_dst="$TARGET_CODEX_CONFIG/engram-compact-prompt.md"
+    copy_file "$compact_src" "$compact_dst"
+    step "Copied engram-compact-prompt.md -> $compact_dst"
+
+    # 5. Check config.toml for model_instructions_file
+    local config_toml="$TARGET_CODEX_CONFIG/config.toml"
+    if [[ -f "$config_toml" ]]; then
+        if grep -q "model_instructions_file" "$config_toml" 2>/dev/null; then
+            info "config.toml already has model_instructions_file setting."
+        else
+            echo ""
+            info "NOTE: Add this to your config.toml ($config_toml):"
+            info '  model_instructions_file = "instructions.md"'
+        fi
+    else
+        echo ""
+        info "NOTE: config.toml not found at $config_toml"
+        info "Create it and add:"
+        info '  model_instructions_file = "instructions.md"'
+    fi
 
     echo -e "${GREEN}[Codex] Done!${NC}"
-    echo ""
-    info "NOTE: You must manually add this to your Codex config.toml:"
-    info '  [instructions]'
-    info '  files = ["orchestrator-instructions.md"]'
-    info "  Config location: $TARGET_CODEX_CONFIG/config.toml"
 }
 
 # --- Parse arguments ---

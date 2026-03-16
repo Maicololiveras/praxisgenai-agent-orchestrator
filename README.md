@@ -6,9 +6,9 @@ Multi-agent orchestration package for AI coding assistants. Coordinates work usi
 
 | Editor | Install | Status |
 |---|---|---|
-| OpenCode | Full (skills + agents + commands + config) | Ready |
-| Gemini CLI | Full (skills + instructions) | Ready |
-| Codex | Full (skills + instructions) | Ready |
+| OpenCode | Full (personality + skills + orchestrator) | Ready |
+| Gemini CLI | Full (personality + skills + orchestrator) | Ready |
+| Codex | Full (personality + skills + orchestrator) | Ready |
 | Claude Code | Not needed (native support) | Native |
 
 ## Quick Install
@@ -83,11 +83,36 @@ curl -sSL https://raw.githubusercontent.com/Maicololiveras/praxisgenai-agent-orc
 | `sdd-archive` | Archive a completed change |
 | `_shared` | Convention reference docs (engram, openspec, persistence) |
 
+### Personality (Gentleman Programming)
+- Senior Architect persona with Rioplatense Spanish and direct English
+- Rules: verify before agreeing, propose alternatives, push back on shortcuts
+- Philosophy: CONCEPTS > CODE, AI IS A TOOL, SOLID FOUNDATIONS
+- Injected into all editors' instruction files
+
 ### Editor-Specific
 
 - **OpenCode**: Agent prompts (11 agents), slash commands (`/orch-*`, `/sdd-*`), config merge
 - **Gemini CLI**: Orchestrator rules appended to `GEMINI.md`, skills table patch
 - **Codex**: Orchestrator instructions file for `config.toml`
+
+### Per-Editor Installation Details
+
+**OpenCode:**
+- Skills → ~/.config/opencode/skills/
+- Agent prompts → ~/.config/opencode/agents/
+- Commands → ~/.config/opencode/commands/
+- AGENTS.md → ~/.config/opencode/AGENTS.md (personality + orchestrator)
+- Config merge → ~/.config/opencode/opencode.json
+
+**Gemini CLI:**
+- Skills → ~/.gemini/skills/
+- GEMINI.md → ~/.gemini/GEMINI.md (personality + orchestrator)
+
+**Codex:**
+- Skills → ~/.codex/skills/
+- instructions.md → %APPDATA%/codex/instructions.md (personality + engram + orchestrator)
+- engram-instructions.md → %APPDATA%/codex/
+- engram-compact-prompt.md → %APPDATA%/codex/
 
 ## Architecture
 
@@ -163,12 +188,17 @@ praxisgenai-agent-orchestrator/
     opencode/
       agents/                      # Agent prompt files
       commands/                    # Slash command definitions
+      AGENTS.md                    # Full: personality + orchestrator
       opencode.agents.json         # Config to merge
     gemini/
+      GEMINI_PERSONALITY.md        # Personality section
       GEMINI_ORCHESTRATOR.md       # Rules to append
       skills-table-patch.md        # Skills table row
     codex/
-      orchestrator-instructions.md
+      instructions.md              # Full: personality + engram + orchestrator
+      engram-instructions.md       # Engram protocol standalone
+      engram-compact-prompt.md     # Compaction prompt for Engram
+      orchestrator-instructions.md # Legacy orchestrator-only
       config-patch.toml
   scripts/
     install.ps1                    # Windows installer
